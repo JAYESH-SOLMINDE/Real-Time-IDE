@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.env
+.DS_Store
+*.log
+.vite/
+server/.env
+client/.env
+server/.envYY
