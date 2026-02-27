@@ -7,3 +7,5 @@ dist/
 server/.env
 client/.env
 server/.envYY
+server/.env
+client/.env

@@ -2,10 +2,9 @@ import { Server, Socket } from 'socket.io';
 import { SOCKET_EVENTS } from './events';
 import logger from '../utils/logger';
 
-// In-memory store for active rooms
 const roomStates = new Map<string, {
   files: Map<string, string>;
-  users: Map<string, { username: string; color: string }>;
+  users: Map<string, { username: string; color: string; inVoice?: boolean }>;
 }>();
 
 const COLORS = ['#6366f1','#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6'];
@@ -20,27 +19,23 @@ export const initSocket = (io: Server): void => {
 
       if (!roomStates.has(roomId)) {
         roomStates.set(roomId, {
-          files: new Map([['main.js', '// Start coding here!\n']]),
+          files: new Map([['main.js', '// Welcome to Code Current!\n']]),
           users: new Map(),
         });
       }
 
-      const room = roomStates.get(roomId)!;
+      const room  = roomStates.get(roomId)!;
       const color = COLORS[room.users.size % COLORS.length];
       room.users.set(socket.id, { username, color });
 
-      // Send current code state to new joiner
       const filesObj: Record<string, string> = {};
       room.files.forEach((content, name) => { filesObj[name] = content; });
       socket.emit(SOCKET_EVENTS.SYNC_CODE, { files: filesObj });
 
-      // Broadcast updated user list
       const users = Array.from(room.users.entries()).map(([id, u]) => ({
         socketId: id, username: u.username, color: u.color,
       }));
       io.to(roomId).emit(SOCKET_EVENTS.USER_LIST, { users });
-
-      // Notify others
       socket.to(roomId).emit(SOCKET_EVENTS.USER_JOINED, { username, color });
       logger.info(`${username} joined room ${roomId}`);
     });
@@ -54,15 +49,15 @@ export const initSocket = (io: Server): void => {
 
     // ── CURSOR MOVE ──
     socket.on(SOCKET_EVENTS.CURSOR_MOVE, ({ roomId, cursor, username, color }) => {
-      socket.to(roomId).emit(SOCKET_EVENTS.CURSOR_MOVE, { cursor, username, color, socketId: socket.id });
+      socket.to(roomId).emit(SOCKET_EVENTS.CURSOR_MOVE, {
+        cursor, username, color, socketId: socket.id,
+      });
     });
 
     // ── FILE CREATE ──
     socket.on(SOCKET_EVENTS.FILE_CREATE, ({ roomId, filename }) => {
       const room = roomStates.get(roomId);
-      if (room && !room.files.has(filename)) {
-        room.files.set(filename, '');
-      }
+      if (room && !room.files.has(filename)) room.files.set(filename, '');
       io.to(roomId).emit(SOCKET_EVENTS.FILE_CREATE, { filename });
     });
 
@@ -89,12 +84,78 @@ export const initSocket = (io: Server): void => {
       io.to(roomId).emit(SOCKET_EVENTS.CHAT_MESSAGE, { message, username, timestamp });
     });
 
+    // ────────────────────────────────────────
+    // ── VOICE EVENTS ──
+    // ────────────────────────────────────────
+
+    // ── VOICE JOIN ──
+    socket.on('voice-join', ({ roomId, username }) => {
+      const room = roomStates.get(roomId);
+      if (!room) return;
+
+      const user = room.users.get(socket.id);
+      if (user) user.inVoice = true;
+
+      // Tell the joiner which other sockets are already in voice
+      const voiceSocketIds: string[] = [];
+      room.users.forEach((u, sid) => {
+        if (sid !== socket.id && u.inVoice) {
+          voiceSocketIds.push(sid);
+        }
+      });
+
+      socket.emit('voice-user-list', { socketIds: voiceSocketIds });
+      socket.to(roomId).emit('voice-join', { socketId: socket.id, username });
+      logger.info(`${username} joined voice in room ${roomId}`);
+    });
+
+    // ── VOICE LEAVE ──
+    socket.on('voice-leave', ({ roomId }) => {
+      const room = roomStates.get(roomId);
+      if (room) {
+        const user = room.users.get(socket.id);
+        if (user) user.inVoice = false;
+      }
+      socket.to(roomId).emit('voice-leave', { socketId: socket.id });
+    });
+
+    // ── VOICE SIGNALING ──
+    socket.on('voice-offer', ({ to, offer }) => {
+      io.to(to).emit('voice-offer', { from: socket.id, offer });
+    });
+
+    socket.on('voice-answer', ({ to, answer }) => {
+      io.to(to).emit('voice-answer', { from: socket.id, answer });
+    });
+
+    socket.on('voice-ice', ({ to, candidate }) => {
+      io.to(to).emit('voice-ice', { from: socket.id, candidate });
+    });
+
+    // ── VOICE MUTE ──
+    socket.on('voice-mute', ({ roomId, muted }) => {
+      socket.to(roomId).emit('voice-mute', { socketId: socket.id, muted });
+    });
+
+    // ── VOICE SPEAKING (who is talking) ──
+    socket.on('voice-speaking', ({ roomId, speaking }) => {
+      socket.to(roomId).emit('voice-speaking', { socketId: socket.id, speaking });
+    });
+
+    // ────────────────────────────────────────
+
     // ── DISCONNECT ──
     socket.on('disconnect', () => {
+      logger.info(`Socket disconnected: ${socket.id}`);
       roomStates.forEach((room, roomId) => {
         if (room.users.has(socket.id)) {
           const user = room.users.get(socket.id)!;
           room.users.delete(socket.id);
+
+          // Also notify voice disconnect
+          if (user.inVoice) {
+            io.to(roomId).emit('voice-leave', { socketId: socket.id });
+          }
 
           const users = Array.from(room.users.entries()).map(([id, u]) => ({
             socketId: id, username: u.username, color: u.color,
