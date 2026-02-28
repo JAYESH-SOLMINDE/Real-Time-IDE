@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface VoiceUser {
@@ -5,325 +6,268 @@ interface VoiceUser {
   username: string;
   muted: boolean;
   speaking: boolean;
+  videoEnabled: boolean;
+  stream?: MediaStream;
 }
 
 interface VoicePanelProps {
   inVoice: boolean;
   muted: boolean;
   speaking: boolean;
+  videoEnabled: boolean;
   voiceUsers: VoiceUser[];
   error: string;
   username: string;
+  localVideo: React.RefObject<MediaStream | null>;
   onJoin: () => void;
   onLeave: () => void;
   onToggleMute: () => void;
+  onToggleVideo: () => void;
 }
 
 const AVATAR_COLORS = [
-  '#6366f1', '#3b82f6', '#10b981',
-  '#f59e0b', '#ef4444', '#8b5cf6',
-  '#06b6d4', '#ec4899',
+  '#6366f1','#3b82f6','#10b981',
+  '#f59e0b','#ef4444','#8b5cf6','#06b6d4','#ec4899',
 ];
 
-// ── Animated sound wave bars (shows when speaking) ──
 function SoundWave() {
   return (
-    <div className="flex items-center gap-0.5" style={{ height: '16px' }}>
-      {[1, 2, 3, 4, 5].map(i => (
-        <motion.div
-          key={i}
-          className="rounded-full"
-          style={{ width: '3px', background: '#10b981', minHeight: '3px' }}
-          animate={{ height: ['3px', `${6 + i * 3}px`, '3px'] }}
-          transition={{
-            repeat: Infinity,
-            duration: 0.5,
-            delay: i * 0.08,
-            ease: 'easeInOut',
-          }}
+    <div className="flex items-center gap-0.5" style={{ height: '14px' }}>
+      {[1,2,3,4,5].map(i => (
+        <motion.div key={i} className="rounded-full"
+          style={{ width: '2.5px', background: '#10b981', minHeight: '2px' }}
+          animate={{ height: ['2px', `${4 + i * 3}px`, '2px'] }}
+          transition={{ repeat: Infinity, duration: 0.5, delay: i * 0.08, ease: 'easeInOut' }}
         />
       ))}
     </div>
   );
 }
 
-// ── Pulsing rings around avatar when speaking ──
-function SpeakingRings({ color }: { color: string }) {
+function SpeakingRings() {
   return (
     <>
-      {[1, 2].map(i => (
-        <motion.div
-          key={i}
-          className="absolute inset-0 rounded-full"
-          style={{ border: `2px solid ${color}`, opacity: 0 }}
-          animate={{ scale: 1 + i * 0.4, opacity: [0.6, 0] }}
-          transition={{
-            repeat: Infinity,
-            duration: 1.2,
-            delay: i * 0.3,
-            ease: 'easeOut',
-          }}
+      {[1,2].map(i => (
+        <motion.div key={i} className="absolute inset-0 rounded-full"
+          style={{ border: '2px solid #10b981', opacity: 0 }}
+          animate={{ scale: 1 + i * 0.4, opacity: [0.5, 0] }}
+          transition={{ repeat: Infinity, duration: 1.2, delay: i * 0.3, ease: 'easeOut' }}
         />
       ))}
     </>
   );
 }
 
-// ── Single user card ──
-function UserCard({
-  letter,
-  name,
-  muted,
-  speaking,
-  isMe,
-  color,
-}: {
-  letter: string;
-  name: string;
+// ── Video tile for remote users ──
+function RemoteVideo({ stream, username, muted, speaking, color }: {
+  stream?: MediaStream;
+  username: string;
   muted: boolean;
   speaking: boolean;
-  isMe?: boolean;
   color: string;
 }) {
-  const isTalking = speaking && !muted;
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    if (videoRef.current && stream) {
+      videoRef.current.srcObject = stream;
+    }
+  }, [stream]);
+
+  const hasVideo = stream && stream.getVideoTracks().length > 0;
 
   return (
-    <motion.div
-      layout
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -10 }}
-      className="flex items-center gap-3 p-3 rounded-xl transition-all"
+    <div className="relative rounded-xl overflow-hidden"
       style={{
-        background: isTalking
-          ? 'rgba(16,185,129,0.08)'
-          : isMe
-          ? 'rgba(99,102,241,0.08)'
-          : 'rgba(255,255,255,0.03)',
-        border: isTalking
-          ? '1px solid rgba(16,185,129,0.35)'
-          : isMe
-          ? '1px solid rgba(99,102,241,0.25)'
-          : '1px solid rgba(255,255,255,0.06)',
-      }}
-    >
-      {/* Avatar */}
-      <div className="relative flex-shrink-0" style={{ width: '40px', height: '40px' }}>
-        {/* Speaking rings */}
-        {isTalking && <SpeakingRings color="#10b981" />}
-
-        {/* Avatar circle */}
-        <div
-          className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white relative z-10"
-          style={{ background: color }}
-        >
-          {letter}
+        background: '#0d0d14',
+        border: speaking ? '2px solid #10b981' : '1px solid rgba(255,255,255,0.08)',
+        aspectRatio: '16/9',
+      }}>
+      {hasVideo ? (
+        <video ref={videoRef} autoPlay playsInline muted={false}
+          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+        />
+      ) : (
+        <div className="w-full h-full flex items-center justify-center">
+          <div className="w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold text-white"
+            style={{ background: color }}>
+            {username.charAt(0).toUpperCase()}
+          </div>
         </div>
+      )}
 
-        {/* Status badge bottom-right */}
-        <div
-          className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full flex items-center justify-center z-20"
-          style={{
-            background: '#0d0d14',
-            border: `2px solid ${muted ? '#ef4444' : isTalking ? '#10b981' : '#334155'}`,
-            fontSize: '8px',
-          }}
-        >
-          {muted ? '🔇' : isTalking ? '🎙' : ''}
-        </div>
+      {/* Name tag */}
+      <div className="absolute bottom-2 left-2 flex items-center gap-1.5 px-2 py-0.5 rounded-lg"
+        style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)' }}>
+        {speaking && !muted && <SoundWave />}
+        <span className="text-xs text-white font-medium">{username}</span>
+        {muted && <span className="text-xs">🔇</span>}
       </div>
+    </div>
+  );
+}
 
-      {/* Name + status */}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5">
-          <p className="text-sm font-medium text-white truncate">{name}</p>
-          {isMe && (
-            <span
-              className="text-xs px-1.5 py-0.5 rounded-full flex-shrink-0"
-              style={{
-                background: 'rgba(99,102,241,0.15)',
-                color: '#818cf8',
-                fontSize: '10px',
-              }}
-            >
-              You
-            </span>
-          )}
-        </div>
+// ── Local video preview ──
+function LocalVideo({ localVideo, username, muted, speaking, videoEnabled }: {
+  localVideo: React.RefObject<MediaStream | null>;
+  username: string;
+  muted: boolean;
+  speaking: boolean;
+  videoEnabled: boolean;
+}) {
+  const videoRef = useRef<HTMLVideoElement>(null);
 
-        {/* Status row */}
-        <div className="flex items-center gap-2 mt-0.5">
-          {muted ? (
-            <span className="text-xs" style={{ color: '#ef4444' }}>
-              Muted
-            </span>
-          ) : isTalking ? (
-            <div className="flex items-center gap-1.5">
-              <SoundWave />
-              <span className="text-xs font-medium" style={{ color: '#10b981' }}>
-                Speaking
-              </span>
-            </div>
-          ) : (
-            <span className="text-xs" style={{ color: '#475569' }}>
-              Connected
-            </span>
-          )}
+  useEffect(() => {
+    if (videoRef.current && localVideo.current && videoEnabled) {
+      videoRef.current.srcObject = localVideo.current;
+    }
+  }, [localVideo, videoEnabled]);
+
+  return (
+    <div className="relative rounded-xl overflow-hidden"
+      style={{
+        background: '#0d0d14',
+        border: speaking ? '2px solid #10b981' : '1px solid rgba(99,102,241,0.3)',
+        aspectRatio: '16/9',
+      }}>
+      {videoEnabled ? (
+        <video ref={videoRef} autoPlay playsInline muted
+          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+        />
+      ) : (
+        <div className="w-full h-full flex items-center justify-center">
+          <div className="w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold text-white"
+            style={{ background: '#6366f1' }}>
+            {username.charAt(0).toUpperCase()}
+          </div>
         </div>
+      )}
+
+      {/* Name tag */}
+      <div className="absolute bottom-2 left-2 flex items-center gap-1.5 px-2 py-0.5 rounded-lg"
+        style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)' }}>
+        {speaking && !muted && <SoundWave />}
+        <span className="text-xs text-white font-medium">{username}</span>
+        <span className="text-xs px-1 rounded"
+          style={{ background: 'rgba(99,102,241,0.3)', color: '#818cf8', fontSize: '9px' }}>
+          You
+        </span>
+        {muted && <span className="text-xs">🔇</span>}
+        {!videoEnabled && <span className="text-xs">📵</span>}
       </div>
-    </motion.div>
+    </div>
   );
 }
 
 export default function VoicePanel({
-  inVoice,
-  muted,
-  speaking,
-  voiceUsers,
-  error,
-  username,
-  onJoin,
-  onLeave,
-  onToggleMute,
+  inVoice, muted, speaking, videoEnabled,
+  voiceUsers, error, username, localVideo,
+  onJoin, onLeave, onToggleMute, onToggleVideo,
 }: VoicePanelProps) {
-  const totalInVoice = inVoice ? voiceUsers.length + 1 : 0;
+  const total = inVoice ? voiceUsers.length + 1 : 0;
 
   return (
     <div className="h-full flex flex-col" style={{ background: '#16162a' }}>
 
       {/* ── Header ── */}
-      <div
-        className="flex items-center justify-between px-4 py-3 flex-shrink-0"
-        style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}
-      >
+      <div className="flex items-center justify-between px-4 py-3 flex-shrink-0"
+        style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
         <div className="flex items-center gap-2">
           <span className="text-base">🎙️</span>
-          <span
-            className="text-sm font-semibold uppercase tracking-wider"
-            style={{ color: '#94a3b8' }}
-          >
-            Voice Chat
+          <span className="text-sm font-semibold uppercase tracking-wider"
+            style={{ color: '#94a3b8' }}>
+            Voice & Video
           </span>
         </div>
-
-        {/* Live badge */}
         {inVoice && (
-          <div
-            className="flex items-center gap-1.5 px-2 py-1 rounded-full"
-            style={{
-              background: 'rgba(16,185,129,0.1)',
-              border: '1px solid rgba(16,185,129,0.25)',
-            }}
-          >
-            <motion.div
-              animate={{ opacity: [1, 0.3, 1] }}
+          <div className="flex items-center gap-1.5 px-2 py-1 rounded-full"
+            style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.25)' }}>
+            <motion.div animate={{ opacity: [1, 0.3, 1] }}
               transition={{ repeat: Infinity, duration: 1.5 }}
-              className="w-1.5 h-1.5 rounded-full"
-              style={{ background: '#10b981' }}
-            />
+              className="w-1.5 h-1.5 rounded-full" style={{ background: '#10b981' }} />
             <span className="text-xs font-medium" style={{ color: '#10b981' }}>
-              {totalInVoice} live
+              {total} live
             </span>
           </div>
         )}
       </div>
 
       {/* ── Body ── */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-2">
+      <div className="flex-1 overflow-y-auto p-3 space-y-3">
 
         {/* Error */}
         {error && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="px-3 py-2 rounded-lg text-xs"
-            style={{
-              background: 'rgba(239,68,68,0.1)',
-              color: '#f87171',
-              border: '1px solid rgba(239,68,68,0.2)',
-            }}
-          >
+          <div className="px-3 py-2 rounded-lg text-xs"
+            style={{ background: 'rgba(239,68,68,0.1)', color: '#f87171',
+                     border: '1px solid rgba(239,68,68,0.2)' }}>
             ⚠️ {error}
-          </motion.div>
+          </div>
         )}
 
-        {/* ── NOT IN VOICE ── */}
+        {/* ── NOT JOINED ── */}
         {!inVoice && (
           <div className="text-center py-10 px-4">
-            <motion.div
-              animate={{ scale: [1, 1.1, 1] }}
+            <motion.div animate={{ scale: [1, 1.1, 1] }}
               transition={{ repeat: Infinity, duration: 2 }}
-              className="text-5xl mb-4"
-            >
-              🎙️
-            </motion.div>
-            <p className="text-sm font-semibold text-white mb-1">
-              Join Voice Chat
-            </p>
+              className="text-5xl mb-4">🎙️</motion.div>
+            <p className="text-sm font-semibold text-white mb-1">Voice & Video Chat</p>
             <p className="text-xs mb-6" style={{ color: '#475569' }}>
-              Talk with your team while you code together
+              Talk and share your camera with teammates
             </p>
-            <motion.button
-              whileHover={{ scale: 1.03 }}
-              whileTap={{ scale: 0.97 }}
+            <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
               onClick={onJoin}
               className="w-full py-3 rounded-xl font-semibold text-white text-sm"
-              style={{
-                background: 'linear-gradient(135deg, #10b981, #059669)',
-                border: 'none',
-                cursor: 'pointer',
-                boxShadow: '0 4px 20px rgba(16,185,129,0.3)',
-              }}
-            >
-              🎙️ Join Voice
+              style={{ background: 'linear-gradient(135deg, #10b981, #059669)',
+                       border: 'none', cursor: 'pointer',
+                       boxShadow: '0 4px 20px rgba(16,185,129,0.3)' }}>
+              🎙️ Join Voice & Video
             </motion.button>
           </div>
         )}
 
-        {/* ── IN VOICE — participant list ── */}
+        {/* ── JOINED ── */}
         {inVoice && (
-          <>
-            {/* Section label */}
-            <p
-              className="text-xs uppercase tracking-wider px-1 pb-1"
-              style={{ color: '#334155' }}
-            >
-              Participants — {totalInVoice}
-            </p>
+          <AnimatePresence>
 
-            <AnimatePresence>
-              {/* Me */}
-              <UserCard
-                key="me"
-                letter={username.charAt(0).toUpperCase()}
-                name={username}
+            {/* Video grid */}
+            <div className="space-y-2">
+              <p className="text-xs uppercase tracking-wider px-1"
+                style={{ color: '#334155' }}>
+                Participants — {total}
+              </p>
+
+              {/* Local video */}
+              <LocalVideo
+                localVideo={localVideo}
+                username={username}
                 muted={muted}
                 speaking={speaking}
-                isMe
-                color={AVATAR_COLORS[0]}
+                videoEnabled={videoEnabled}
               />
 
-              {/* Others */}
+              {/* Remote videos */}
               {voiceUsers.map((user, i) => (
-                <UserCard
-                  key={user.socketId}
-                  letter={user.username.charAt(0).toUpperCase()}
-                  name={user.username}
-                  muted={user.muted}
-                  speaking={user.speaking}
-                  color={AVATAR_COLORS[(i + 1) % AVATAR_COLORS.length]}
-                />
+                <motion.div key={user.socketId}
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}>
+                  <RemoteVideo
+                    stream={user.stream}
+                    username={user.username}
+                    muted={user.muted}
+                    speaking={user.speaking}
+                    color={AVATAR_COLORS[(i + 1) % AVATAR_COLORS.length]}
+                  />
+                </motion.div>
               ))}
-            </AnimatePresence>
+            </div>
 
             {/* ── Controls ── */}
-            <div className="pt-3 space-y-2">
-              {/* Mute toggle */}
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
+            <div className="pt-2 grid grid-cols-2 gap-2">
+              {/* Mute */}
+              <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
                 onClick={onToggleMute}
-                className="w-full py-3 rounded-xl font-semibold text-white text-sm flex items-center justify-center gap-2"
+                className="py-3 rounded-xl font-semibold text-white text-sm flex items-center justify-center gap-2"
                 style={{
                   background: muted
                     ? 'linear-gradient(135deg, #6366f1, #8b5cf6)'
@@ -332,39 +276,47 @@ export default function VoicePanel({
                     ? '1px solid rgba(99,102,241,0.4)'
                     : '1px solid rgba(255,255,255,0.1)',
                   cursor: 'pointer',
-                  boxShadow: muted ? '0 4px 15px rgba(99,102,241,0.25)' : 'none',
-                }}
-              >
-                {muted ? '🎙️ Unmute' : '🔇 Mute'}
+                }}>
+                {muted ? '🎙️' : '🔇'}
+                <span className="text-xs">{muted ? 'Unmute' : 'Mute'}</span>
               </motion.button>
 
-              {/* Leave */}
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={onLeave}
-                className="w-full py-3 rounded-xl font-semibold text-sm flex items-center justify-center gap-2"
+              {/* Video toggle */}
+              <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                onClick={onToggleVideo}
+                className="py-3 rounded-xl font-semibold text-white text-sm flex items-center justify-center gap-2"
                 style={{
-                  background: 'rgba(239,68,68,0.08)',
-                  color: '#f87171',
-                  border: '1px solid rgba(239,68,68,0.2)',
+                  background: videoEnabled
+                    ? 'linear-gradient(135deg, #3b82f6, #6366f1)'
+                    : 'rgba(255,255,255,0.06)',
+                  border: videoEnabled
+                    ? '1px solid rgba(59,130,246,0.4)'
+                    : '1px solid rgba(255,255,255,0.1)',
                   cursor: 'pointer',
-                }}
-              >
-                📵 Leave Voice
+                }}>
+                {videoEnabled ? '📹' : '📷'}
+                <span className="text-xs">{videoEnabled ? 'Stop Video' : 'Start Video'}</span>
               </motion.button>
             </div>
-          </>
+
+            {/* Leave */}
+            <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+              onClick={onLeave}
+              className="w-full py-3 rounded-xl font-semibold text-sm flex items-center justify-center gap-2"
+              style={{ background: 'rgba(239,68,68,0.08)', color: '#f87171',
+                       border: '1px solid rgba(239,68,68,0.2)', cursor: 'pointer' }}>
+              📵 Leave
+            </motion.button>
+
+          </AnimatePresence>
         )}
       </div>
 
-      {/* ── Footer ── */}
-      <div
-        className="px-4 py-2 flex-shrink-0 text-center"
-        style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}
-      >
+      {/* Footer */}
+      <div className="px-4 py-2 flex-shrink-0 text-center"
+        style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
         <p className="text-xs" style={{ color: '#1e293b' }}>
-          Peer-to-peer · WebRTC · No servers
+          Peer-to-peer · WebRTC · Encrypted
         </p>
       </div>
     </div>

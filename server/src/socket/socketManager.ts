@@ -16,14 +16,12 @@ export const initSocket = (io: Server): void => {
     // ── JOIN ROOM ──
     socket.on(SOCKET_EVENTS.JOIN_ROOM, ({ roomId, username }) => {
       socket.join(roomId);
-
       if (!roomStates.has(roomId)) {
         roomStates.set(roomId, {
           files: new Map([['main.js', '// Welcome to Code Current!\n']]),
           users: new Map(),
         });
       }
-
       const room  = roomStates.get(roomId)!;
       const color = COLORS[room.users.size % COLORS.length];
       room.users.set(socket.id, { username, color });
@@ -49,9 +47,7 @@ export const initSocket = (io: Server): void => {
 
     // ── CURSOR MOVE ──
     socket.on(SOCKET_EVENTS.CURSOR_MOVE, ({ roomId, cursor, username, color }) => {
-      socket.to(roomId).emit(SOCKET_EVENTS.CURSOR_MOVE, {
-        cursor, username, color, socketId: socket.id,
-      });
+      socket.to(roomId).emit(SOCKET_EVENTS.CURSOR_MOVE, { cursor, username, color, socketId: socket.id });
     });
 
     // ── FILE CREATE ──
@@ -84,24 +80,20 @@ export const initSocket = (io: Server): void => {
       io.to(roomId).emit(SOCKET_EVENTS.CHAT_MESSAGE, { message, username, timestamp });
     });
 
-    // ────────────────────────────────────────
-    // ── VOICE EVENTS ──
-    // ────────────────────────────────────────
+    // ═══════════════════════════════════════
+    // ── VOICE & VIDEO EVENTS ──
+    // ═══════════════════════════════════════
 
     // ── VOICE JOIN ──
     socket.on('voice-join', ({ roomId, username }) => {
       const room = roomStates.get(roomId);
       if (!room) return;
-
       const user = room.users.get(socket.id);
       if (user) user.inVoice = true;
 
-      // Tell the joiner which other sockets are already in voice
       const voiceSocketIds: string[] = [];
       room.users.forEach((u, sid) => {
-        if (sid !== socket.id && u.inVoice) {
-          voiceSocketIds.push(sid);
-        }
+        if (sid !== socket.id && u.inVoice) voiceSocketIds.push(sid);
       });
 
       socket.emit('voice-user-list', { socketIds: voiceSocketIds });
@@ -119,7 +111,7 @@ export const initSocket = (io: Server): void => {
       socket.to(roomId).emit('voice-leave', { socketId: socket.id });
     });
 
-    // ── VOICE SIGNALING ──
+    // ── WebRTC SIGNALING ──
     socket.on('voice-offer', ({ to, offer }) => {
       io.to(to).emit('voice-offer', { from: socket.id, offer });
     });
@@ -132,17 +124,22 @@ export const initSocket = (io: Server): void => {
       io.to(to).emit('voice-ice', { from: socket.id, candidate });
     });
 
-    // ── VOICE MUTE ──
+    // ── MUTE ──
     socket.on('voice-mute', ({ roomId, muted }) => {
       socket.to(roomId).emit('voice-mute', { socketId: socket.id, muted });
     });
 
-    // ── VOICE SPEAKING (who is talking) ──
+    // ── SPEAKING DETECTION ──
     socket.on('voice-speaking', ({ roomId, speaking }) => {
       socket.to(roomId).emit('voice-speaking', { socketId: socket.id, speaking });
     });
 
-    // ────────────────────────────────────────
+    // ── VIDEO TOGGLE ──
+    socket.on('voice-video', ({ roomId, videoEnabled }) => {
+      socket.to(roomId).emit('voice-video', { socketId: socket.id, videoEnabled });
+    });
+
+    // ═══════════════════════════════════════
 
     // ── DISCONNECT ──
     socket.on('disconnect', () => {
@@ -152,7 +149,6 @@ export const initSocket = (io: Server): void => {
           const user = room.users.get(socket.id)!;
           room.users.delete(socket.id);
 
-          // Also notify voice disconnect
           if (user.inVoice) {
             io.to(roomId).emit('voice-leave', { socketId: socket.id });
           }
