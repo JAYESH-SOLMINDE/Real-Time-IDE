@@ -2,7 +2,6 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 import MonacoEditor from '@monaco-editor/react';
 import { Socket } from 'socket.io-client';
 import axios from 'axios';
-import { SERVER_URL } from '../../utils/config';
 
 interface EditorSettings {
   fontSize: number;
@@ -21,27 +20,16 @@ interface EditorProps {
   onChange: (filename: string, content: string) => void;
 }
 
-// ── Detect mobile ──
-const isMobile = () => window.innerWidth < 768 ||
-  /Android|iPhone|iPad|iPod|Opera Mini|IEMobile/i.test(navigator.userAgent);
-
 export default function Editor({
   filename, content, settings, socket, roomId, username, onChange
 }: EditorProps) {
   const debounceRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
   const aiDebounceRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isRemoteChange = useRef(false);
-  const [mobile, setMobile] = useState(isMobile());
 
-  const [suggestion, setSuggestion]   = useState('');
-  const [aiLoading, setAiLoading]     = useState(false);
-  const [showSuggest, setShowSuggest] = useState(false);
-
-  useEffect(() => {
-    const handleResize = () => setMobile(isMobile());
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
+  const [suggestion, setSuggestion]     = useState('');
+  const [aiLoading, setAiLoading]       = useState(false);
+  const [showSuggest, setShowSuggest]   = useState(false);
 
   // ── Listen for remote code changes ──
   useEffect(() => {
@@ -56,21 +44,23 @@ export default function Editor({
     return () => { socket.off('code-change', handleCodeChange); };
   }, [socket, filename, onChange]);
 
-  // ── Fetch AI suggestion ──
+  // ── Fetch AI suggestion from Groq ──
   const fetchAISuggestion = useCallback(async (currentCode: string) => {
     if (!currentCode.trim() || currentCode.trim().length < 10) return;
     setAiLoading(true);
     try {
-      const res = await axios.post(`${SERVER_URL}/api/ai/suggest`, {
+      const res = await axios.post(`${import.meta.env.VITE_SERVER_URL || 'http://192.168.0.104:3001'}/api/ai/suggest`, {
         code: currentCode,
         language: settings.language,
         filename,
       }, { timeout: 15000 });
-      if (res.data.suggestion?.trim()) {
+
+      if (res.data.suggestion && res.data.suggestion.trim()) {
         setSuggestion(res.data.suggestion);
         setShowSuggest(true);
       } else {
-        setSuggestion(''); setShowSuggest(false);
+        setSuggestion('');
+        setShowSuggest(false);
       }
     } catch {
       setShowSuggest(false);
@@ -79,43 +69,46 @@ export default function Editor({
     }
   }, [settings.language, filename]);
 
+  // ── Accept suggestion ──
   const acceptSuggestion = useCallback(() => {
     if (!suggestion) return;
     const newContent = content + '\n' + suggestion;
     onChange(filename, newContent);
     socket?.emit('code-change', { roomId, filename, content: newContent });
-    setSuggestion(''); setShowSuggest(false);
+    setSuggestion('');
+    setShowSuggest(false);
   }, [suggestion, content, filename, onChange, socket, roomId]);
 
+  // ── Handle editor typing ──
   const handleEditorChange = useCallback((value: string | undefined) => {
-    if (isRemoteChange.current) { isRemoteChange.current = false; return; }
+    if (isRemoteChange.current) {
+      isRemoteChange.current = false;
+      return;
+    }
     const newContent = value || '';
     onChange(filename, newContent);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      socket?.emit('code-change', { roomId, filename, content: newContent });
-    }, 300);
-    setSuggestion(''); setShowSuggest(false);
-    if (aiDebounceRef.current) clearTimeout(aiDebounceRef.current);
-    aiDebounceRef.current = setTimeout(() => fetchAISuggestion(newContent), 1500);
-  }, [filename, roomId, socket, onChange, fetchAISuggestion]);
 
-  // ── Mobile textarea change ──
-  const handleMobileChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    if (isRemoteChange.current) { isRemoteChange.current = false; return; }
-    const newContent = e.target.value;
-    onChange(filename, newContent);
+    // Sync to other users (300ms debounce)
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
       socket?.emit('code-change', { roomId, filename, content: newContent });
     }, 300);
-    setSuggestion(''); setShowSuggest(false);
+
+    // Ask AI (1500ms debounce — fires after you stop typing)
+    setSuggestion('');
+    setShowSuggest(false);
     if (aiDebounceRef.current) clearTimeout(aiDebounceRef.current);
-    aiDebounceRef.current = setTimeout(() => fetchAISuggestion(newContent), 2000);
+    aiDebounceRef.current = setTimeout(() => {
+      fetchAISuggestion(newContent);
+    }, 1500);
   }, [filename, roomId, socket, onChange, fetchAISuggestion]);
 
   const handleCursorChange = useCallback((e: any) => {
-    socket?.emit('cursor-move', { roomId, username, cursor: e.position, color: '#6366f1' });
+    socket?.emit('cursor-move', {
+      roomId, username,
+      cursor: e.position,
+      color: '#6366f1',
+    });
   }, [socket, roomId, username]);
 
   const downloadFile = () => {
@@ -130,119 +123,106 @@ export default function Editor({
     <div className="h-full flex flex-col" style={{ background: '#0f0f17' }}>
 
       {/* ── Toolbar ── */}
-      <div className="flex items-center justify-between px-3 py-1 flex-shrink-0"
-        style={{ background: '#1a1a2e', borderBottom: '1px solid #3a3a4c', minHeight: '40px' }}>
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="text-xs font-mono truncate" style={{ color: '#818cf8' }}>{filename}</span>
-          <span className="text-xs px-2 py-0.5 rounded flex-shrink-0"
+      <div className="flex items-center justify-between px-4 py-1 flex-shrink-0"
+        style={{ background: '#1a1a2e', borderBottom: '1px solid #3a3a4c', height: '36px' }}>
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-mono" style={{ color: '#818cf8' }}>{filename}</span>
+          <span className="text-xs px-2 py-0.5 rounded"
             style={{ background: 'rgba(99,102,241,0.15)', color: '#818cf8' }}>
             {settings.language}
           </span>
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex items-center gap-2">
           {aiLoading && (
             <div className="flex items-center gap-1 px-2 py-0.5 rounded"
               style={{ background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.2)' }}>
               <span style={{ fontSize: '10px', color: '#818cf8' }}>⟳</span>
-              <span className="text-xs" style={{ color: '#818cf8' }}>
-                {mobile ? 'AI...' : 'AI thinking...'}
-              </span>
+              <span className="text-xs" style={{ color: '#818cf8' }}>AI thinking...</span>
             </div>
           )}
           <button onClick={downloadFile}
-            className="text-xs px-2 py-1 rounded hover:opacity-80 transition-all"
+            className="text-xs px-3 py-1 rounded hover:opacity-80 transition-all"
             style={{ background: '#2a2a3c', color: '#aaa', border: '1px solid #3a3a4c' }}>
-            ⬇
+            ⬇ Download
           </button>
         </div>
       </div>
 
-      {/* ── Editor ── */}
+      {/* ── Monaco Editor ── */}
       <div className="flex-1 overflow-hidden">
-        {mobile ? (
-          // ── Mobile: Simple textarea ──
-          <textarea
-            value={content}
-            onChange={handleMobileChange}
-            spellCheck={false}
-            autoCapitalize="none"
-            autoCorrect="off"
-            autoComplete="off"
-            style={{
-              width: '100%',
-              height: '100%',
-              background: '#1e1e2e',
-              color: '#d4d4d4',
-              fontFamily: 'JetBrains Mono, Menlo, Monaco, monospace',
-              fontSize: `${Math.max(settings.fontSize - 2, 13)}px`,
-              lineHeight: '1.6',
-              padding: '16px',
-              border: 'none',
-              outline: 'none',
-              resize: 'none',
-              tabSize: 2,
-              whiteSpace: 'pre',
-              overflowX: 'auto',
-              boxSizing: 'border-box',
-            }}
-          />
-        ) : (
-          // ── Desktop: Monaco Editor ──
-          <MonacoEditor
-            height="100%"
-            language={settings.language}
-            theme={settings.theme}
-            value={content}
-            onChange={handleEditorChange}
-            onMount={(editor) => {
-              editor.onDidChangeCursorPosition(handleCursorChange);
-            }}
-            options={{
-              fontSize: settings.fontSize,
-              fontFamily: settings.fontFamily,
-              minimap: { enabled: false },
-              scrollBeyondLastLine: false,
-              wordWrap: 'on',
-              automaticLayout: true,
-              tabSize: 2,
-              lineNumbers: 'on',
-              renderLineHighlight: 'all',
-              cursorBlinking: 'smooth',
-              smoothScrolling: true,
-              padding: { top: 16 },
-              lineHeight: 1.6,
-            }}
-          />
-        )}
+        <MonacoEditor
+          height="100%"
+          language={settings.language}
+          theme={settings.theme}
+          value={content}
+          onChange={handleEditorChange}
+          onMount={(editor) => {
+            editor.onDidChangeCursorPosition(handleCursorChange);
+          }}
+          options={{
+            fontSize: settings.fontSize,
+            fontFamily: settings.fontFamily,
+            minimap: { enabled: false },
+            scrollBeyondLastLine: false,
+            wordWrap: 'on',
+            automaticLayout: true,
+            tabSize: 2,
+            lineNumbers: 'on',
+            renderLineHighlight: 'all',
+            cursorBlinking: 'smooth',
+            smoothScrolling: true,
+            padding: { top: 16 },
+            lineHeight: 1.6,
+          }}
+        />
       </div>
 
       {/* ── AI Suggestion Panel ── */}
       {showSuggest && suggestion && (
         <div className="flex-shrink-0"
-          style={{ background: 'rgba(10,10,20,0.97)', borderTop: '1px solid rgba(99,102,241,0.35)' }}>
-          <div className="flex items-center justify-between px-3 py-2"
+          style={{
+            background: 'rgba(10,10,20,0.97)',
+            borderTop: '1px solid rgba(99,102,241,0.35)',
+          }}>
+
+          {/* Panel header */}
+          <div className="flex items-center justify-between px-4 py-2"
             style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
             <div className="flex items-center gap-2">
               <span style={{ fontSize: '14px' }}>⚡</span>
-              <span className="text-xs font-semibold" style={{ color: '#818cf8' }}>AI Suggestion</span>
+              <span className="text-xs font-semibold" style={{ color: '#818cf8' }}>
+                AI Suggestion
+              </span>
+              <span className="text-xs px-2 py-0.5 rounded"
+                style={{ background: 'rgba(99,102,241,0.1)', color: '#6366f1' }}>
+                Groq / Llama 3
+              </span>
             </div>
             <div className="flex items-center gap-2">
-              <button onClick={acceptSuggestion}
+              <button
+                onClick={acceptSuggestion}
                 className="flex items-center gap-1 px-3 py-1 rounded text-xs font-semibold text-white"
                 style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', border: 'none', cursor: 'pointer' }}>
-                ✓ Accept
+                ✓ Accept (Tab)
               </button>
-              <button onClick={() => { setShowSuggest(false); setSuggestion(''); }}
+              <button
+                onClick={() => { setShowSuggest(false); setSuggestion(''); }}
                 className="px-2 py-1 rounded text-xs"
                 style={{ background: 'rgba(255,255,255,0.05)', color: '#666', border: 'none', cursor: 'pointer' }}>
                 ✕
               </button>
             </div>
           </div>
+
+          {/* The suggested code */}
           <pre className="px-4 py-3 text-xs overflow-x-auto"
             style={{
-              fontFamily: 'JetBrains Mono, monospace', color: '#6ee7b7',
-              lineHeight: 1.7, maxHeight: '120px', overflowY: 'auto', margin: 0,
+              fontFamily: 'JetBrains Mono, monospace',
+              color: '#6ee7b7',
+              lineHeight: 1.7,
+              maxHeight: '140px',
+              overflowY: 'auto',
+              margin: 0,
             }}>
             {suggestion}
           </pre>
