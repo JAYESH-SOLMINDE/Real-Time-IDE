@@ -18,7 +18,7 @@ export default function RunPanel({ code, language }: RunPanelProps) {
     setExecTime(null);
 
     try {
-      const res = await axios.post('http://localhost:3001/api/execute', {
+      const res = await axios.post(`${import.meta.env.VITE_SERVER_URL || 'http://192.168.0.104:3001'}/api/execute`, {
         code,
         language,
         stdin,

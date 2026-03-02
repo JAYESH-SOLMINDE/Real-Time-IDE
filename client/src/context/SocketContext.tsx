@@ -17,9 +17,12 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
   const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
-    console.log('🔌 Connecting to http://localhost:3001');
+    // Use env variable — works for both localhost AND network devices
+    const serverUrl = import.meta.env.VITE_SOCKET_URL || 'http://192.168.0.104:3001';
+    
+    console.log('🔌 Connecting to:', serverUrl);
 
-    const newSocket = io('http://localhost:3001', {
+    const newSocket = io(serverUrl, {
       transports: ['polling', 'websocket'],
       reconnectionAttempts: 10,
       reconnectionDelay: 1000,

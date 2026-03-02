@@ -9,3 +9,4 @@ client/.env
 server/.envYY
 server/.env
 client/.env
+echo "dist/" >> ~/code-current/server/.gitignore

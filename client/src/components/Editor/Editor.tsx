@@ -49,7 +49,7 @@ export default function Editor({
     if (!currentCode.trim() || currentCode.trim().length < 10) return;
     setAiLoading(true);
     try {
-      const res = await axios.post('http://localhost:3001/api/ai/suggest', {
+      const res = await axios.post(`${import.meta.env.VITE_SERVER_URL || 'http://192.168.0.104:3001'}/api/ai/suggest`, {
         code: currentCode,
         language: settings.language,
         filename,
