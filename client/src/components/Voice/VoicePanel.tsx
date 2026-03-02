@@ -44,7 +44,7 @@ function SoundWave() {
   );
 }
 
-function SpeakingRings() {
+export function SpeakingRings() {
   return (
     <>
       {[1,2].map(i => (

@@ -8,7 +8,7 @@ export default function LandingPage() {
   const [roomId, setRoomId]     = useState('');
   const [username, setUsername] = useState('');
   const [error, setError]       = useState('');
-  const [copied, setCopied]     = useState(false);
+  const [roomCopied, setRoomCopied]     = useState(false);
   const navigate = useNavigate();
 
   const handleJoin = () => {

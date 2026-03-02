@@ -1,5 +1,6 @@
-import { createContext, useContext, useState, ReactNode } from 'react';
-import { User, ChatMessage, EditorSettings, RoomContextType } from '../types';
+import { createContext, useContext, useState } from 'react';
+import type { ReactNode } from 'react';
+import type { User, ChatMessage, EditorSettings, RoomContextType } from '../types';
 
 const defaultSettings: EditorSettings = {
   fontSize: 16,
