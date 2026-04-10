@@ -3,6 +3,7 @@ import { Toaster } from 'react-hot-toast';
 import { SocketProvider } from './context/SocketContext';
 import LandingPage from './pages/LandingPage';
 import RoomPage from './pages/RoomPage';
+import BMIPage from './pages/BMIPage';
 import NotFound from './pages/NotFound';
 
 function App() {
@@ -22,6 +23,7 @@ function App() {
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/room/:roomId" element={<RoomPage />} />
+          <Route path="/bmi" element={<BMIPage />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </SocketProvider>
