@@ -18,10 +18,11 @@ interface EditorProps {
   roomId: string;
   username: string;
   onChange: (filename: string, content: string) => void;
+  readOnly?: boolean;
 }
 
 export default function Editor({
-  filename, content, settings, socket, roomId, username, onChange
+  filename, content, settings, socket, roomId, username, onChange, readOnly = false
 }: EditorProps) {
   const debounceRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
   const aiDebounceRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -49,7 +50,7 @@ export default function Editor({
     if (!currentCode.trim() || currentCode.trim().length < 10) return;
     setAiLoading(true);
     try {
-      const res = await axios.post(`${import.meta.env.VITE_SERVER_URL || 'http://192.168.0.104:3001'}/api/ai/suggest`, {
+      const res = await axios.post(`${import.meta.env.VITE_SERVER_URL || `http://${window.location.hostname}:3001`}/api/ai/suggest`, {
         code: currentCode,
         language: settings.language,
         filename,
@@ -72,7 +73,17 @@ export default function Editor({
   // ── Accept suggestion ──
   const acceptSuggestion = useCallback(() => {
     if (!suggestion) return;
-    const newContent = content + '\n' + suggestion;
+
+    // Smart append: check the last line of existing content
+    const lines = content.split('\n');
+    const lastLine = lines[lines.length - 1].trimEnd();
+
+    // If the last line is empty or ends with a statement terminator, put suggestion on a new line
+    // Otherwise, append inline (same line, no gap)
+    const endsWithTerminator = /[;{})\]>]$/.test(lastLine) || lastLine === '';
+    const separator = endsWithTerminator ? '\n' : '';
+
+    const newContent = content + separator + suggestion;
     onChange(filename, newContent);
     socket?.emit('code-change', { roomId, filename, content: newContent });
     setSuggestion('');
@@ -173,6 +184,7 @@ export default function Editor({
             smoothScrolling: true,
             padding: { top: 16 },
             lineHeight: 1.6,
+            readOnly,
           }}
         />
       </div>

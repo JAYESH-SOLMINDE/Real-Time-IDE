@@ -1,19 +1,47 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { LogOut, Crown, Edit3, Eye } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
 
 interface NavbarProps {
   roomId: string;
   username: string;
   isConnected: boolean;
+  role?: string;
 }
 
-export default function Navbar({ roomId, username, isConnected }: NavbarProps) {
+export default function Navbar({ roomId, username, isConnected, role }: NavbarProps) {
   const [copied, setCopied] = useState(false);
+  const { logout } = useAuth();
+  const navigate = useNavigate();
 
   const copyRoomId = () => {
     navigator.clipboard.writeText(roomId);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleLogout = () => {
+    logout();
+    navigate('/');
+  };
+
+  const getRoleBadge = () => {
+    if (!role) return null;
+    const configs: Record<string, { icon: React.ReactNode; bg: string; color: string; border: string }> = {
+      owner: { icon: <Crown size={10} />, bg: 'rgba(245,158,11,0.15)', color: '#f59e0b', border: 'rgba(245,158,11,0.3)' },
+      editor: { icon: <Edit3 size={10} />, bg: 'rgba(99,102,241,0.15)', color: '#818cf8', border: 'rgba(99,102,241,0.3)' },
+      viewer: { icon: <Eye size={10} />, bg: 'rgba(107,114,128,0.15)', color: '#9ca3af', border: 'rgba(107,114,128,0.3)' },
+    };
+    const c = configs[role] || configs.viewer;
+    return (
+      <div className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
+        style={{ background: c.bg, color: c.color, border: `1px solid ${c.border}` }}>
+        {c.icon}
+        <span className="capitalize">{role}</span>
+      </div>
+    );
   };
 
   return (
@@ -73,8 +101,11 @@ export default function Navbar({ roomId, username, isConnected }: NavbarProps) {
         )}
       </div>
 
-      {/* ── User + Status ── */}
+      {/* ── User + Role + Status ── */}
       <div className="flex items-center gap-3">
+        {/* Role badge */}
+        {getRoleBadge()}
+
         {/* Connection indicator */}
         <div className="flex items-center gap-1.5">
           <motion.div
@@ -113,6 +144,13 @@ export default function Navbar({ roomId, username, isConnected }: NavbarProps) {
             {username}
           </span>
         </div>
+
+        {/* Logout */}
+        <button onClick={handleLogout} title="Logout"
+          className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs"
+          style={{ background: 'rgba(239,68,68,0.08)', color: '#f87171', border: '1px solid rgba(239,68,68,0.15)', cursor: 'pointer' }}>
+          <LogOut size={12} />
+        </button>
       </div>
     </div>
   );

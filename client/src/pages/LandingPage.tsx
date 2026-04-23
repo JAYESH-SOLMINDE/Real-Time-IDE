@@ -1,37 +1,9 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Hash, User, ArrowRight, Zap, Users, MessageSquare, Play } from 'lucide-react';
-import { generateRoomId } from '../utils/helpers';
+import { useNavigate } from 'react-router-dom';
+import { Zap, Users, MessageSquare, Play, Hash, ArrowRight, Shield } from 'lucide-react';
 
 export default function LandingPage() {
-  const [roomId, setRoomId]     = useState('');
-  const [username, setUsername] = useState('');
-  const [error, setError]       = useState('');
-  const [roomCopied, setRoomCopied]     = useState(false);
   const navigate = useNavigate();
-
-  const handleJoin = () => {
-    if (!roomId.trim())   { setError('Please enter a Room ID'); return; }
-    if (!username.trim()) { setError('Please enter your name'); return; }
-    navigate(`/room/${roomId.trim()}`, { state: { username: username.trim() } });
-  };
-
-  const handleGenerate = () => {
-    setRoomId(generateRoomId());
-    setError('');
-  };
-
-  const inputStyle = {
-    width: '100%', height: '48px',
-    background: 'rgba(255,255,255,0.04)',
-    border: '1px solid rgba(255,255,255,0.08)',
-    borderRadius: '10px',
-    paddingLeft: '40px', paddingRight: '16px',
-    color: '#e2e8f0', fontSize: '14px',
-    outline: 'none', transition: 'all 0.2s ease',
-    fontFamily: 'Inter, sans-serif',
-  };
 
   const features = [
     { icon: <Zap size={28} className="text-white" />, color: 'from-indigo-500 to-purple-600',
@@ -42,9 +14,9 @@ export default function LandingPage() {
       title: 'Built-in Chat', desc: 'Communicate without leaving the editor. Discuss code right where you write it.' },
     { icon: <Play size={28} className="text-white" />, color: 'from-orange-500 to-red-600',
       title: 'Run Code Live', desc: 'Execute JavaScript, Python, Java, C++ and more directly in the browser.' },
-    { icon: <Hash size={28} className="text-white" />, color: 'from-pink-500 to-rose-600',
-      title: 'Instant Rooms', desc: 'No sign-up needed. Generate a room ID, share the link, start coding together.' },
-    { icon: <Zap size={28} className="text-white" />, color: 'from-yellow-500 to-amber-600',
+    { icon: <Shield size={28} className="text-white" />, color: 'from-pink-500 to-rose-600',
+      title: 'Role-Based Access', desc: 'Owner, Editor, Viewer roles. Full control over who can do what in your room.' },
+    { icon: <Hash size={28} className="text-white" />, color: 'from-yellow-500 to-amber-600',
       title: 'Monaco Editor', desc: 'Powered by the same editor as VS Code. Full syntax highlighting and IntelliSense.' },
   ];
 
@@ -97,17 +69,28 @@ export default function LandingPage() {
             ))}
           </div>
 
-          {/* CTA */}
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.97 }}
-            onClick={() => document.getElementById('join-card')?.scrollIntoView({ behavior: 'smooth' })}
-            className="px-5 py-2.5 text-white text-sm font-semibold rounded-lg"
-            style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-                     boxShadow: '0 4px 15px rgba(99,102,241,0.3)' }}
-          >
-            Get Started
-          </motion.button>
+          {/* Auth buttons */}
+          <div className="flex items-center gap-3">
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.97 }}
+              onClick={() => navigate('/login')}
+              className="px-5 py-2.5 text-sm font-semibold rounded-lg"
+              style={{ color: '#818cf8', background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.3)', cursor: 'pointer' }}
+            >
+              Sign In
+            </motion.button>
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.97 }}
+              onClick={() => navigate('/signup')}
+              className="px-5 py-2.5 text-white text-sm font-semibold rounded-lg"
+              style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                       boxShadow: '0 4px 15px rgba(99,102,241,0.3)', cursor: 'pointer', border: 'none' }}
+            >
+              Get Started
+            </motion.button>
+          </div>
         </div>
       </nav>
 
@@ -126,7 +109,7 @@ export default function LandingPage() {
               >
                 <span className="w-2 h-2 rounded-full" style={{ background: '#10b981', boxShadow: '0 0 6px #10b981' }} />
                 <span className="text-sm font-medium" style={{ color: '#d1d5db' }}>
-                  Now live — Real-time collaboration for everyone
+                  Now with Role-Based Access Control
                 </span>
               </motion.div>
 
@@ -151,7 +134,7 @@ export default function LandingPage() {
                 className="text-xl leading-relaxed max-w-lg"
                 style={{ color: '#9ca3af' }}
               >
-                A browser-based collaborative IDE. Write code together in real time — with live cursors, instant chat, and one-click code execution.
+                A browser-based collaborative IDE. Write code together in real time — with live cursors, instant chat, role-based access, and one-click code execution.
               </motion.p>
 
               <motion.div
@@ -162,13 +145,23 @@ export default function LandingPage() {
                 <motion.button
                   whileHover={{ scale: 1.03, boxShadow: '0 8px 30px rgba(99,102,241,0.4)' }}
                   whileTap={{ scale: 0.97 }}
-                  onClick={() => document.getElementById('join-card')?.scrollIntoView({ behavior: 'smooth' })}
+                  onClick={() => navigate('/signup')}
                   className="flex items-center gap-2 px-8 py-4 text-white font-semibold rounded-xl"
                   style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-                           boxShadow: '0 4px 20px rgba(99,102,241,0.3)' }}
+                           boxShadow: '0 4px 20px rgba(99,102,241,0.3)', border: 'none', cursor: 'pointer' }}
                 >
                   Start Coding Free
                   <ArrowRight size={18} />
+                </motion.button>
+                <motion.button
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.97 }}
+                  onClick={() => navigate('/login')}
+                  className="flex items-center gap-2 px-8 py-4 font-semibold rounded-xl"
+                  style={{ color: '#818cf8', background: 'rgba(99,102,241,0.1)',
+                           border: '1px solid rgba(99,102,241,0.3)', cursor: 'pointer' }}
+                >
+                  Sign In
                 </motion.button>
               </motion.div>
 
@@ -185,8 +178,8 @@ export default function LandingPage() {
                   ))}
                 </div>
                 <div>
-                  <div className="text-white font-semibold">No sign-up needed</div>
-                  <div className="text-sm" style={{ color: '#6b7280' }}>Just a name + room ID</div>
+                  <div className="text-white font-semibold">Secure & Controlled</div>
+                  <div className="text-sm" style={{ color: '#6b7280' }}>Owner · Editor · Viewer roles</div>
                 </div>
               </motion.div>
             </div>
@@ -326,102 +319,33 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── JOIN CARD ── */}
-      <section id="join-card" className="relative z-10 py-24 px-6">
-        <div className="max-w-lg mx-auto">
-          <div className="text-center mb-10">
-            <h2 className="text-4xl font-bold text-white mb-4"
-              style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-              Start Coding{' '}
-              <span style={{
-                background: 'linear-gradient(135deg, #818cf8, #c084fc)',
-                WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
-              }}>Right Now</span>
-            </h2>
-            <p style={{ color: '#9ca3af' }}>No sign-up. No credit card. Just code.</p>
+      {/* ── CTA ── */}
+      <section className="relative z-10 py-24 px-6">
+        <div className="max-w-lg mx-auto text-center">
+          <h2 className="text-4xl font-bold text-white mb-4"
+            style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+            Ready to{' '}
+            <span style={{
+              background: 'linear-gradient(135deg, #818cf8, #c084fc)',
+              WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+            }}>Start Coding?</span>
+          </h2>
+          <p className="mb-8" style={{ color: '#9ca3af' }}>
+            Create a free account and start collaborating in seconds.
+          </p>
+          <div className="flex items-center justify-center gap-4">
+            <motion.button
+              whileHover={{ scale: 1.03, boxShadow: '0 8px 30px rgba(99,102,241,0.4)' }}
+              whileTap={{ scale: 0.97 }}
+              onClick={() => navigate('/signup')}
+              className="flex items-center gap-2 px-8 py-4 text-white font-semibold rounded-xl"
+              style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                       boxShadow: '0 4px 20px rgba(99,102,241,0.3)', border: 'none', cursor: 'pointer' }}
+            >
+              Create Free Account
+              <ArrowRight size={18} />
+            </motion.button>
           </div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            style={{
-              background: 'rgba(30,27,46,0.7)', backdropFilter: 'blur(40px)',
-              border: '1px solid rgba(129,140,248,0.2)',
-              borderRadius: '20px', padding: '40px',
-              boxShadow: '0 25px 50px rgba(0,0,0,0.5)',
-            }}
-          >
-            {error && (
-              <motion.div
-                initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                className="mb-4 px-4 py-2 rounded-lg text-sm"
-                style={{ background: 'rgba(239,68,68,0.1)', color: '#f87171',
-                         border: '1px solid rgba(239,68,68,0.2)' }}
-              >{error}</motion.div>
-            )}
-
-            {/* Username */}
-            <div className="mb-4">
-              <label className="block text-xs font-medium mb-2 uppercase tracking-wider"
-                style={{ color: '#94a3b8' }}>Your Name</label>
-              <div className="relative">
-                <User size={16} className="absolute left-3 top-1/2 -translate-y-1/2"
-                  style={{ color: '#475569' }} />
-                <input type="text" placeholder="e.g. Alex" value={username}
-                  onChange={e => { setUsername(e.target.value); setError(''); }}
-                  onKeyDown={e => e.key === 'Enter' && handleJoin()}
-                  style={inputStyle}
-                  onFocus={e => { e.target.style.borderColor = '#6366f1'; e.target.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.15)'; }}
-                  onBlur={e => { e.target.style.borderColor = 'rgba(255,255,255,0.08)'; e.target.style.boxShadow = 'none'; }}
-                />
-              </div>
-            </div>
-
-            {/* Room ID */}
-            <div className="mb-3">
-              <label className="block text-xs font-medium mb-2 uppercase tracking-wider"
-                style={{ color: '#94a3b8' }}>Room ID</label>
-              <div className="relative">
-                <Hash size={16} className="absolute left-3 top-1/2 -translate-y-1/2"
-                  style={{ color: '#475569' }} />
-                <input type="text" placeholder="Enter or generate a room ID" value={roomId}
-                  onChange={e => { setRoomId(e.target.value); setError(''); }}
-                  onKeyDown={e => e.key === 'Enter' && handleJoin()}
-                  style={inputStyle}
-                  onFocus={e => { e.target.style.borderColor = '#6366f1'; e.target.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.15)'; }}
-                  onBlur={e => { e.target.style.borderColor = 'rgba(255,255,255,0.08)'; e.target.style.boxShadow = 'none'; }}
-                />
-              </div>
-            </div>
-
-            <motion.button
-              whileHover={{ x: 3 }} onClick={handleGenerate}
-              className="flex items-center gap-1 text-xs mb-6"
-              style={{ color: '#818cf8', background: 'none', border: 'none',
-                       cursor: 'pointer', padding: 0 }}
-            >
-              <ArrowRight size={12} /> Generate a unique Room ID
-            </motion.button>
-
-            <motion.button
-              whileHover={{ scale: 1.02, filter: 'brightness(1.1)' }}
-              whileTap={{ scale: 0.98 }}
-              onClick={handleJoin}
-              className="w-full font-semibold text-white flex items-center justify-center gap-2"
-              style={{
-                height: '48px', borderRadius: '10px', border: 'none',
-                cursor: 'pointer', fontSize: '15px',
-                background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-                boxShadow: '0 4px 20px rgba(99,102,241,0.4)',
-              }}
-            >
-              Join Room <ArrowRight size={16} />
-            </motion.button>
-
-            <p className="text-center text-xs mt-4" style={{ color: '#374151' }}>
-              Free forever · No account needed
-            </p>
-          </motion.div>
         </div>
       </section>
 
