@@ -22,4 +22,8 @@ exports.SOCKET_EVENTS = {
     VOICE_ICE: 'voice-ice',
     VOICE_USER_LIST: 'voice-user-list',
     VOICE_MUTE: 'voice-mute',
+    // RBAC events (real-time role management)
+    ROLE_CHANGED: 'role-changed',
+    MEMBER_REMOVED: 'member-removed',
+    ROOM_DELETED: 'room-deleted',
 };

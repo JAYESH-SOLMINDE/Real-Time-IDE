@@ -8,29 +8,29 @@ const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const User_1 = __importDefault(require("../models/User"));
 const logger_1 = __importDefault(require("../utils/logger"));
-const signToken = (id, username, role) => {
+const signToken = (id, username) => {
     const secret = process.env.JWT_SECRET || 'secret';
-    return jsonwebtoken_1.default.sign({ id, username, role }, secret, { expiresIn: '7d' });
+    return jsonwebtoken_1.default.sign({ id, username }, secret, { expiresIn: '7d' });
 };
 const register = async (req, res) => {
     try {
-        const { username, email, password } = req.body;
+        const { username, name, email, password } = req.body;
+        if (!username || !name || !email || !password) {
+            res.status(400).json({ success: false, message: 'All fields are required' });
+            return;
+        }
         const existing = await User_1.default.findOne({ $or: [{ email }, { username }] });
         if (existing) {
             res.status(400).json({ success: false, message: 'User already exists' });
             return;
         }
         const passwordHash = await bcryptjs_1.default.hash(password, 12);
-        const user = await User_1.default.create({ username, email, passwordHash });
-        const token = signToken(user.id, user.username, user.role);
-        res.cookie('token', token, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            maxAge: 7 * 24 * 60 * 60 * 1000,
-        });
+        const user = await User_1.default.create({ username, name, email, passwordHash });
+        const token = signToken(user.id, user.username);
         res.status(201).json({
             success: true,
-            user: { id: user.id, username: user.username, role: user.role },
+            token,
+            user: { id: user.id, username: user.username, name: user.name, email: user.email },
         });
     }
     catch (error) {
@@ -42,6 +42,10 @@ exports.register = register;
 const login = async (req, res) => {
     try {
         const { email, password } = req.body;
+        if (!email || !password) {
+            res.status(400).json({ success: false, message: 'Email and password are required' });
+            return;
+        }
         const user = await User_1.default.findOne({ email });
         if (!user) {
             res.status(401).json({ success: false, message: 'Invalid credentials' });
@@ -52,15 +56,11 @@ const login = async (req, res) => {
             res.status(401).json({ success: false, message: 'Invalid credentials' });
             return;
         }
-        const token = signToken(user.id, user.username, user.role);
-        res.cookie('token', token, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            maxAge: 7 * 24 * 60 * 60 * 1000,
-        });
+        const token = signToken(user.id, user.username);
         res.json({
             success: true,
-            user: { id: user.id, username: user.username, role: user.role },
+            token,
+            user: { id: user.id, username: user.username, name: user.name, email: user.email },
         });
     }
     catch (error) {
@@ -70,14 +70,20 @@ const login = async (req, res) => {
 };
 exports.login = login;
 const logout = (_req, res) => {
-    res.clearCookie('token');
     res.json({ success: true, message: 'Logged out' });
 };
 exports.logout = logout;
 const getMe = async (req, res) => {
     try {
         const user = await User_1.default.findById(req.user?.id).select('-passwordHash');
-        res.json({ success: true, user });
+        if (!user) {
+            res.status(404).json({ success: false, message: 'User not found' });
+            return;
+        }
+        res.json({
+            success: true,
+            user: { id: user.id, username: user.username, name: user.name, email: user.email },
+        });
     }
     catch (error) {
         res.status(500).json({ success: false, message: 'Server error' });

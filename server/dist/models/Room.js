@@ -36,13 +36,9 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const mongoose_1 = __importStar(require("mongoose"));
 const RoomSchema = new mongoose_1.Schema({
     roomId: { type: String, required: true, unique: true },
-    creatorId: { type: String, required: true },
+    name: { type: String, default: 'Untitled Room' },
+    creatorId: { type: mongoose_1.Schema.Types.ObjectId, ref: 'User', required: true },
     files: [{ type: String }],
-    collaborators: [{
-            userId: String,
-            username: String,
-            role: { type: String, default: 'collaborator' },
-        }],
     language: { type: String, default: 'javascript' },
     theme: { type: String, default: 'vs-dark' },
     createdAt: { type: Date, default: Date.now, expires: 86400 },
