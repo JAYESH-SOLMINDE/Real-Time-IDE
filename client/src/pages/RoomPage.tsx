@@ -2,8 +2,10 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
+import axios from 'axios';
 
 import { useSocket } from '../context/SocketContext';
+import { useAuth } from '../context/AuthContext';
 import { getLanguageFromFilename } from '../utils/helpers';
 import { useVoice } from '../hooks/useVoice';
 
@@ -16,34 +18,66 @@ import RunPanel from '../components/RunPanel/RunPanel';
 import Settings from '../components/Settings/Settings';
 import Whiteboard from '../components/Whiteboard/Whiteboard';
 import VoicePanel from '../components/Voice/VoicePanel';
+import ManageRoom from '../components/ManageRoom/ManageRoom';
+
+const API = import.meta.env.VITE_SERVER_URL || `http://${window.location.hostname}:3001`;
 
 interface User { socketId: string; username: string; color: string; }
 interface ChatMessage { username: string; message: string; timestamp: string; }
 interface EditorSettings { fontSize: number; fontFamily: string; theme: string; language: string; }
 
-type Panel = 'files' | 'chat' | 'users' | 'run' | 'whiteboard' | 'voice' | 'settings' | null;
-
-const SIDEBAR_ITEMS = [
-  { id: 'files',      emoji: '📁', label: 'Files' },
-  { id: 'chat',       emoji: '💬', label: 'Chat' },
-  { id: 'users',      emoji: '👥', label: 'Users' },
-  { id: 'run',        emoji: '▶️',  label: 'Run Code' },
-  { id: 'whiteboard', emoji: '🎨', label: 'Whiteboard' },
-  { id: 'voice',      emoji: '🎙️', label: 'Voice & Video' },
-  { id: 'settings',   emoji: '⚙️', label: 'Settings' },
-] as const;
+type Panel = 'files' | 'chat' | 'users' | 'run' | 'whiteboard' | 'voice' | 'settings' | 'manage' | null;
 
 export default function RoomPage() {
   const { roomId }  = useParams<{ roomId: string }>();
   const location    = useLocation();
   const navigate    = useNavigate();
   const { socket, isConnected } = useSocket();
+  const { user: authUser } = useAuth();
 
-  const username = (location.state as any)?.username as string | undefined;
+  const username = (location.state as any)?.username as string | undefined || authUser?.name || authUser?.username;
+
+  // Role from backend
+  const [roomRole, setRoomRole] = useState<string>('viewer');
+  const [roleLoading, setRoleLoading] = useState(true);
 
   useEffect(() => {
     if (!username) navigate('/');
   }, [username, navigate]);
+
+  // Fetch user's role in this room
+  const fetchRole = useCallback(async () => {
+    if (!roomId) return;
+    try {
+      const res = await axios.get(`${API}/api/rooms/${roomId}`);
+      if (res.data.success) {
+        setRoomRole(res.data.role || 'viewer');
+      }
+    } catch (err: any) {
+      if (err.response?.status === 403) {
+        toast.error('You are not a member of this room');
+        navigate('/dashboard');
+      }
+    } finally {
+      setRoleLoading(false);
+    }
+  }, [roomId, navigate]);
+
+  useEffect(() => { fetchRole(); }, [fetchRole]);
+
+  const isViewer = roomRole === 'viewer';
+  const isOwner = roomRole === 'owner';
+
+  const SIDEBAR_ITEMS = [
+    { id: 'files',      emoji: '📁', label: 'Files' },
+    { id: 'chat',       emoji: '💬', label: 'Chat' },
+    { id: 'users',      emoji: '👥', label: 'Users' },
+    { id: 'run',        emoji: '▶️',  label: 'Run Code' },
+    { id: 'whiteboard', emoji: '🎨', label: 'Whiteboard' },
+    { id: 'voice',      emoji: '🎙️', label: 'Voice & Video' },
+    { id: 'settings',   emoji: '⚙️', label: 'Settings' },
+    ...(isOwner ? [{ id: 'manage', emoji: '👑', label: 'Manage Room' }] : []),
+  ] as const;
 
   const [activePanel, setActivePanel] = useState<Panel>('files');
   const [files, setFiles]             = useState<Record<string, string>>({ 'main.js': '// Welcome to Code Current!\n// Start typing to get AI suggestions...\n' });
@@ -111,6 +145,40 @@ export default function RoomPage() {
       if (activeFile === oldName) setActiveFile(newName);
     });
 
+    // ── RBAC Real-time Events ──
+
+    // When any member's role is changed by the owner
+    socket.on('role-changed', ({ targetUserId, newRole, changedBy }: { targetUserId: string; newRole: string; changedBy: string }) => {
+      // If this event is about ME, update my role instantly
+      if (targetUserId === authUser?.id) {
+        setRoomRole(newRole);
+        if (newRole === 'viewer') {
+          toast('Your role was changed to Viewer (read-only)', { icon: '👁️' });
+        } else if (newRole === 'editor') {
+          toast.success('Your role was changed to Editor — you can now edit!', { icon: '✏️' });
+        } else if (newRole === 'owner') {
+          toast.success('You are now the Owner of this room!', { icon: '👑' });
+        }
+      } else if (changedBy !== authUser?.id) {
+        // Someone else's role changed (and I didn't do it)
+        toast(`A member's role was updated`, { icon: '🔄' });
+      }
+    });
+
+    // When a member is removed from the room
+    socket.on('member-removed', ({ targetUserId }: { targetUserId: string }) => {
+      if (targetUserId === authUser?.id) {
+        toast.error('You have been removed from this room');
+        navigate('/dashboard');
+      }
+    });
+
+    // When the room is deleted
+    socket.on('room-deleted', () => {
+      toast.error('This room has been deleted by the owner');
+      navigate('/dashboard');
+    });
+
     return () => {
       socket.off('sync-code');
       socket.off('user-list');
@@ -120,8 +188,11 @@ export default function RoomPage() {
       socket.off('file-create');
       socket.off('file-delete');
       socket.off('file-rename');
+      socket.off('role-changed');
+      socket.off('member-removed');
+      socket.off('room-deleted');
     };
-  }, [socket, roomId, username]);
+  }, [socket, roomId, username, authUser?.id, navigate]);
 
   const handleFileChange = useCallback((filename: string, content: string) => {
     setFiles(prev => ({ ...prev, [filename]: content }));
@@ -163,13 +234,35 @@ export default function RoomPage() {
 
   if (!username) return null;
 
+  if (roleLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center"
+        style={{ background: '#0d0d14', color: '#818cf8', fontFamily: 'Inter, sans-serif' }}>
+        <div className="text-center">
+          <div className="text-3xl mb-3">⚡</div>
+          <p className="text-sm">Loading room...</p>
+        </div>
+      </div>
+    );
+  }
+
   const isWhiteboard = activePanel === 'whiteboard';
 
   return (
     <div className="flex flex-col h-screen overflow-hidden"
       style={{ background: '#0d0d14', fontFamily: 'Inter, sans-serif' }}>
 
-      <Navbar roomId={roomId!} username={username} isConnected={isConnected} />
+      <Navbar roomId={roomId!} username={username} isConnected={isConnected} role={roomRole} />
+
+      {/* ── Viewer Banner ── */}
+      {isViewer && (
+        <div className="flex items-center justify-center px-4 py-1.5 flex-shrink-0"
+          style={{ background: 'rgba(245,158,11,0.08)', borderBottom: '1px solid rgba(245,158,11,0.2)' }}>
+          <span className="text-xs font-medium" style={{ color: '#f59e0b' }}>
+            👁️ You are a Viewer — read-only access
+          </span>
+        </div>
+      )}
 
       {/* ── Voice/Video Top Bar ── */}
       <AnimatePresence>
@@ -286,13 +379,13 @@ export default function RoomPage() {
                 <motion.div
                   key={activePanel}
                   initial={{ width: 0, opacity: 0 }}
-                  animate={{ width: activePanel === 'voice' ? 320 : 300, opacity: 1 }}
+                  animate={{ width: activePanel === 'voice' ? 320 : activePanel === 'manage' ? 340 : 300, opacity: 1 }}
                   exit={{ width: 0, opacity: 0 }}
                   transition={{ duration: 0.2, ease: 'easeInOut' }}
                   className="flex-shrink-0 overflow-hidden"
                   style={{ borderRight: '1px solid rgba(255,255,255,0.05)', background: '#16162a' }}
                 >
-                  <div style={{ width: activePanel === 'voice' ? '320px' : '300px', height: '100%' }}>
+                  <div style={{ width: activePanel === 'voice' ? '320px' : activePanel === 'manage' ? '340px' : '300px', height: '100%' }}>
 
                     {activePanel === 'files' && (
                       <FileTree
@@ -340,6 +433,17 @@ export default function RoomPage() {
                         updateSettings={(s) => setSettings(prev => ({ ...prev, ...s }))} />
                     )}
 
+                    {activePanel === 'manage' && isOwner && (
+                      <ManageRoom
+                        roomId={roomId!}
+                        currentUserId={authUser?.id || ''}
+                        currentRole={roomRole}
+                        socket={socket}
+                        onRoomDeleted={() => navigate('/dashboard')}
+                        onRoleChanged={fetchRole}
+                      />
+                    )}
+
                   </div>
                 </motion.div>
               )}
@@ -373,8 +477,9 @@ export default function RoomPage() {
                 {activeFile ? (
                   <Editor key={activeFile} filename={activeFile}
                     content={files[activeFile] || ''} settings={settings}
-                    socket={socket} roomId={roomId!} username={username}
-                    onChange={handleFileChange}
+                    socket={isViewer ? null : socket} roomId={roomId!} username={username}
+                    onChange={isViewer ? () => {} : handleFileChange}
+                    readOnly={isViewer}
                   />
                 ) : (
                   <div className="h-full flex items-center justify-center" style={{ color: '#2d3748' }}>

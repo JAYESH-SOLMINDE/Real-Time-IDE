@@ -18,7 +18,7 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     // Use env variable — works for both localhost AND network devices
-    const serverUrl = import.meta.env.VITE_SOCKET_URL || 'http://192.168.0.104:3001';
+    const serverUrl = import.meta.env.VITE_SOCKET_URL || `http://${window.location.hostname}:3001`;
     
     console.log('🔌 Connecting to:', serverUrl);
 

@@ -140,6 +140,31 @@ export const initSocket = (io: Server): void => {
     });
 
     // ═══════════════════════════════════════
+    // ── RBAC REAL-TIME EVENTS ──
+    // ═══════════════════════════════════════
+
+    // ── ROLE CHANGED ── (owner broadcasts to entire room)
+    socket.on(SOCKET_EVENTS.ROLE_CHANGED, ({ roomId, targetUserId, newRole, changedBy }) => {
+      // Broadcast to ALL sockets in the room (including sender for confirmation)
+      io.to(roomId).emit(SOCKET_EVENTS.ROLE_CHANGED, { targetUserId, newRole, changedBy });
+      logger.info(`Role changed in room ${roomId}: user ${targetUserId} → ${newRole} (by ${changedBy})`);
+    });
+
+    // ── MEMBER REMOVED ── (owner broadcasts to entire room)
+    socket.on(SOCKET_EVENTS.MEMBER_REMOVED, ({ roomId, targetUserId, removedBy }) => {
+      io.to(roomId).emit(SOCKET_EVENTS.MEMBER_REMOVED, { targetUserId, removedBy });
+      logger.info(`Member removed from room ${roomId}: user ${targetUserId} (by ${removedBy})`);
+    });
+
+    // ── ROOM DELETED ── (owner broadcasts to entire room)
+    socket.on(SOCKET_EVENTS.ROOM_DELETED, ({ roomId, deletedBy }) => {
+      io.to(roomId).emit(SOCKET_EVENTS.ROOM_DELETED, { roomId, deletedBy });
+      logger.info(`Room ${roomId} deleted by ${deletedBy}`);
+      // Clean up in-memory state
+      roomStates.delete(roomId);
+    });
+
+    // ═══════════════════════════════════════
 
     // ── DISCONNECT ──
     socket.on('disconnect', () => {

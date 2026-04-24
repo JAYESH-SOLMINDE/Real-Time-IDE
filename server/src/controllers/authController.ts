@@ -4,14 +4,19 @@ import jwt from 'jsonwebtoken';
 import User from '../models/User';
 import logger from '../utils/logger';
 
-const signToken = (id: string, username: string, role: string): string => {
+const signToken = (id: string, username: string): string => {
   const secret = process.env.JWT_SECRET || 'secret';
-  return jwt.sign({ id, username, role }, secret, { expiresIn: '7d' });
+  return jwt.sign({ id, username }, secret, { expiresIn: '7d' });
 };
 
 export const register = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { username, email, password } = req.body;
+    const { username, name, email, password } = req.body;
+
+    if (!username || !name || !email || !password) {
+      res.status(400).json({ success: false, message: 'All fields are required' });
+      return;
+    }
 
     const existing = await User.findOne({ $or: [{ email }, { username }] });
     if (existing) {
@@ -20,19 +25,14 @@ export const register = async (req: Request, res: Response): Promise<void> => {
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
-    const user = await User.create({ username, email, passwordHash });
+    const user = await User.create({ username, name, email, passwordHash });
 
-    const token = signToken(user.id, user.username, user.role);
-
-    res.cookie('token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
+    const token = signToken(user.id, user.username);
 
     res.status(201).json({
       success: true,
-      user: { id: user.id, username: user.username, role: user.role },
+      token,
+      user: { id: user.id, username: user.username, name: user.name, email: user.email },
     });
   } catch (error) {
     logger.error(`Register error: ${error}`);
@@ -43,6 +43,11 @@ export const register = async (req: Request, res: Response): Promise<void> => {
 export const login = async (req: Request, res: Response): Promise<void> => {
   try {
     const { email, password } = req.body;
+
+    if (!email || !password) {
+      res.status(400).json({ success: false, message: 'Email and password are required' });
+      return;
+    }
 
     const user = await User.findOne({ email });
     if (!user) {
@@ -56,17 +61,12 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    const token = signToken(user.id, user.username, user.role);
-
-    res.cookie('token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
+    const token = signToken(user.id, user.username);
 
     res.json({
       success: true,
-      user: { id: user.id, username: user.username, role: user.role },
+      token,
+      user: { id: user.id, username: user.username, name: user.name, email: user.email },
     });
   } catch (error) {
     logger.error(`Login error: ${error}`);
@@ -75,14 +75,20 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 };
 
 export const logout = (_req: Request, res: Response): void => {
-  res.clearCookie('token');
   res.json({ success: true, message: 'Logged out' });
 };
 
 export const getMe = async (req: Request & { user?: any }, res: Response): Promise<void> => {
   try {
     const user = await User.findById(req.user?.id).select('-passwordHash');
-    res.json({ success: true, user });
+    if (!user) {
+      res.status(404).json({ success: false, message: 'User not found' });
+      return;
+    }
+    res.json({
+      success: true,
+      user: { id: user.id, username: user.username, name: user.name, email: user.email },
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Server error' });
   }
